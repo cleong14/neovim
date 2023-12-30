@@ -20,7 +20,7 @@ echo ""
 echo "Updating Neovim source..."
 echo ""
 git pull origin master
-git pull upstream master --rebase
+git pull upstream master --rebase --allow-unrelated-histories
 git push origin master --force-with-lease
 
 # 3. Build nvim
