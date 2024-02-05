@@ -19,7 +19,7 @@ make distclean
 echo ""
 echo "Updating Neovim source..."
 echo ""
-git pull origin master
+git pull origin master --rebase --allow-unrelated-histories
 git pull upstream master --rebase --allow-unrelated-histories
 git push origin master --force-with-lease
 
