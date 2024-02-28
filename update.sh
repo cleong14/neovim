@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # shellcheck disable=2086
 
-set -e
+set -o errexit -o noclobber -o pipefail
+shopt -s failglob inherit_errexit
+
+# # uncomment if you want to print a message when the script exits
+# trap 'echo "Caught EXIT signal, exiting..."' EXIT
+trap 'echo "ERROR: Caught ERR signal, exiting..."' ERR
 
 echo ""
 echo "╭───────────────╮"
@@ -27,7 +32,8 @@ git push origin master --force-with-lease
 echo ""
 echo "Building Neovim..."
 echo ""
-make CMAKE_BUILD_TYPE=RelWithDebInfo CMAKE_INSTALL_PREFIX=$HOME/.local/nvim
+# make CMAKE_BUILD_TYPE=RelWithDebInfo CMAKE_INSTALL_PREFIX=$HOME/.local/nvim
+make CMAKE_BUILD_TYPE=RelWithDebInfo CMAKE_EXTRA_FLAGS="-DCMAKE_INSTALL_PREFIX=$HOME/.local/nvim"
 make install
 
 echo ""
