@@ -4,6 +4,7 @@
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
 
 
+==============================================================================
 Cursor motions					*cursor-motions* *navigation*
 
 These commands move the cursor position.  If the new position is off of the
@@ -79,6 +80,8 @@ start and end position of the motion are included in the operation.  When
 exclusive, the last character towards the end of the buffer is not included.
 Linewise motions always include the start and end position.  Plugins can
 check the v:event.inclusive flag of the |TextYankPost| event.
+For |o_CTRL-V| the motion is always inclusive, unless 'selection' is
+"exclusive".
 
 Which motions are linewise, inclusive or exclusive is mentioned with the
 command.  There are however, two general exceptions:
@@ -336,9 +339,6 @@ g<Down>							*g<Down>*
 `-`  <minus>						*-*
 			[count] lines upward, on the first non-blank
 			character |linewise|.
-							*-_default*
-			By default "-" is mapped to open the parent directory
-			of the current buffer. |dir-mappings| |default-mappings|
 
 `+`							*+*
 CTRL-M							*CTRL-M*

@@ -10,12 +10,16 @@ local retry = t.retry
 local write_file = t.write_file
 local sleep = vim.uv.sleep
 
---- Returns true if the autoread module is watching the given buffer
+--- Returns the file the autoread module watches for the given buffer
 --- (defaults to the current buffer).
-local function is_watching(bufnr)
+local function watched_path(bufnr)
   return n.exec_lua(function(b)
-    return require('nvim.autoread')._is_watching(b or vim.api.nvim_get_current_buf())
+    return require('nvim.autoread')._watched_path(b or vim.api.nvim_get_current_buf())
   end, bufnr)
+end
+
+local function is_watching(bufnr)
+  return watched_path(bufnr) ~= nil
 end
 
 --- Shortens the 'autoread' debounce window so each test doesn't pay the 100ms time-cost.
@@ -106,7 +110,7 @@ describe('autoread file watcher', function()
     eq({ 'local change' }, api.nvim_buf_get_lines(0, 0, -1, true))
   end)
 
-  it('tracks autoread option changes', function()
+  it('tracks autoread option and buffer name changes', function()
     local path = open_watched('original\n')
 
     command('setlocal noautoread')
@@ -126,6 +130,14 @@ describe('autoread file watcher', function()
     retry(nil, 3000, function()
       eq({ 'after reenable' }, api.nvim_buf_get_lines(0, 0, -1, true))
     end)
+
+    -- Renaming moves the watcher to the new file.
+    api.nvim_buf_set_name(0, t.tmpname())
+    eq(api.nvim_buf_get_name(0), watched_path())
+
+    -- Renaming to a nonexistent file stops the watcher.
+    api.nvim_buf_set_name(0, api.nvim_buf_get_name(0) .. '.missing')
+    eq(false, is_watching())
   end)
 
   it('handles file deletion gracefully', function()
@@ -138,6 +150,22 @@ describe('autoread file watcher', function()
     end)
     -- Buffer content remains unchanged.
     eq({ 'will be deleted' }, api.nvim_buf_get_lines(0, 0, -1, true))
+
+    -- Also when the parent directory is deleted. #41851
+    local dir = t.tmpname(false)
+    t.finally(function()
+      n.rmdir(dir)
+    end)
+    n.mkdir_p(dir)
+    path = ('%s/file'):format(dir)
+    write_file(path, 'x\n')
+    command('edit ' .. path)
+    eq(true, is_watching())
+    os.remove(path)
+    assert(vim.uv.fs_rmdir(dir))
+    retry(nil, 3000, function()
+      eq(false, is_watching())
+    end)
   end)
 
   it('coalesces rapid changes via debouncing', function()

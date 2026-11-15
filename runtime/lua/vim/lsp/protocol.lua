@@ -12,7 +12,7 @@ local function get_value_set(tbl)
   return value_set
 end
 
-local sysname = vim.uv.os_uname().sysname
+local sysname = assert(vim.uv.os_uname()).sysname
 
 --- @class vim.lsp.protocol.constants
 --- @nodoc
@@ -620,6 +620,7 @@ function protocol.make_client_capabilities()
       workspaceFolders = true,
       applyEdit = true,
       workspaceEdit = {
+        documentChanges = true,
         resourceOperations = { 'rename', 'create', 'delete' },
         normalizesLineEndings = true,
         changeAnnotationSupport = { groupsOnLabel = true },

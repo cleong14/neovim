@@ -319,6 +319,116 @@ describe('vim._watch', function()
     end)
   end)
 
+  it('watch() shares native handles across rule sets', function()
+    local root_dir = t.tmpname(false)
+    n.mkdir_p(root_dir)
+    t.finally(function()
+      n.rmdir(root_dir)
+    end)
+
+    local result = exec_lua(function(root)
+      root = vim.fs.normalize(root)
+      local callbacks, closes = {}, 0
+      vim.uv.new_fs_event = function()
+        return {
+          start = function(_, _, _, callback)
+            callbacks[#callbacks + 1] = callback
+          end,
+          stop = function() end,
+          is_closing = function()
+            return false
+          end,
+          close = function()
+            closes = closes + 1
+          end,
+        }
+      end
+      local fs_stat = vim.uv.fs_stat
+      vim.uv.fs_stat = function(path, ...)
+        assert(path ~= root .. '/a.lua', 'unmatched events must not stat files')
+        if path == root .. '/blocked.lua' then
+          return nil, 'EACCES: permission denied', 'EACCES'
+        end
+        return fs_stat(path, ...)
+      end
+
+      local T = vim._watch.FileChangeType
+      local events, errors = {}, {}
+      local function subscribe(id, pattern, change_types)
+        return vim._watch.watch({ { path = root, pattern = pattern, events = change_types } }, {
+          on_error = function()
+            errors[#errors + 1] = id
+          end,
+        }, function(path, change_type)
+          events[#events + 1] = { id, vim.fs.basename(path), change_type }
+        end)
+      end
+      local cancel_a = subscribe('a', '**/*.lua', { T.Changed })
+      local cancel_b = subscribe('b', '**/*.py', { T.Created, T.Deleted })
+      local event = callbacks[1]
+
+      event(nil, 'blocked.lua', { rename = true })
+      subscribe('c')() -- A file error must not mark the shared handle failed.
+      event(nil, 'a.lua', { change = true })
+      event(nil, 'b.py', { change = true })
+      event(nil, 'b.py', { rename = true })
+      cancel_a()
+      event(nil, 'a.lua', { rename = true })
+      assert(closes == 0, 'another subscription still owns the handle')
+      -- Different options still need a separate handle.
+      vim._watch.watch(root, { uvflags = { recursive = true } }, function() end)()
+      cancel_b()
+      return { events = events, errors = errors, handles = #callbacks, closes = closes }
+    end, root_dir)
+
+    eq({
+      events = { { 'a', 'a.lua', 2 }, { 'b', 'b.py', 3 } },
+      errors = { 'a' },
+      handles = 2,
+      closes = 2,
+    }, result)
+  end)
+
+  it('watch() reports an error once when the parent directory is deleted #41851', function()
+    skip(is_os('mac'), 'flaky test on mac')
+    local root_dir = t.tmpname(false)
+    t.finally(function()
+      n.rmdir(root_dir)
+    end)
+    n.mkdir_p(root_dir)
+    local file = ('%s/file'):format(root_dir)
+    t.write_file(file, 'x')
+
+    exec_lua(function(f)
+      _G.deleted, _G.errors = false, {}
+      _G.cancel = vim._watch.watch(f, {
+        on_error = function(err)
+          table.insert(_G.errors, err)
+        end,
+      }, function(_, change_type)
+        _G.deleted = _G.deleted or change_type == vim._watch.FileChangeType.Deleted
+      end)
+    end, file)
+    assert(vim.uv.fs_unlink(file))
+    assert(vim.uv.fs_rmdir(root_dir))
+
+    local result = exec_lua(function()
+      vim.wait(3000, function()
+        return _G.deleted
+      end)
+      -- Give a repeating error time to repeat.
+      vim.wait(200, function()
+        return #_G.errors > 1
+      end)
+      _G.cancel()
+      return { deleted = _G.deleted, errors = _G.errors }
+    end)
+
+    eq(true, result.deleted)
+    t.ok(#result.errors <= 1, 'at most 1 error', vim.inspect(result.errors))
+    eq(0, exec_lua('return vim._watch.active().watch'))
+  end)
+
   it('watchdirs() tracks directories for matching files until cancelled', function()
     local root_dir = t.tmpname(false)
     n.mkdir_p(root_dir .. '/src')

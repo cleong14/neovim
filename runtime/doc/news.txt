@@ -4,6 +4,7 @@
                             NVIM REFERENCE MANUAL
 
 
+==============================================================================
 Notable changes since Nvim 0.12                                 *news*
 
 For changes in the previous release, see |news-0.12|.
@@ -44,6 +45,11 @@ LUA
     `{ key = value }` instead of an array of `"key:value"` strings.
   - The `,,` literal-comma convention (e.g. 'isfname') is not reconstructed in
     the structured view; the raw string value is unchanged.
+• Backslashes are not supported in URIs/URLs. E.g. "http:\\host" is treated as
+  a filepath, not a URL, in buffer names, |gf|, etc.
+• |vim.uri.to_fname()| returns "/" separators (also on Windows), drops the URI
+  query, and converts a URI host to a UNC path ("file://server/share" =>
+  "//server/share").
 
 DIAGNOSTICS
 
@@ -90,6 +96,8 @@ API
 • |nvim_clear_autocmds()| no longer treats an empty array event as nil.
 • |vim.o|, |vim.opt|, and |nvim_set_option_value()| expand `~` and environment
   variables (|expand-env|).
+• Security: |TUI|, |--remote-ui| and |--remote| reject server-to-client API
+  calls by default. Only UI events are allowed.
 
 DIAGNOSTICS
 
@@ -122,6 +130,10 @@ EDITOR
 • `stdpath("log")` moved to `stdpath("state")/logs`.
 • An operator on a target that creates a Visual selection ("cgn") does not
   change |'<| |'>|. |gv|
+• After a motion forced blockwise (|o_CTRL-V|), |']| is on the last column
+  of the block: "g@<C-v>l" gives 'operatorfunc' the block that "y<C-v>l"
+  yanks.
+• ":connect!" (with bang "!") was removed.
 • |cmdwin| (|q:|, |q/|, |q?|, |c_CTRL-F|):
   • Only supports one "cmdline level", not "infinite recursion".
   • Expr-register (|i_CTRL-R_=|, |c_CTRL-R_=|) no longer supports opening
@@ -149,8 +161,8 @@ EVENTS
 • |vim.on_key()| callbacks are not invoked for keys consumed by |getchar()|.
 • |BufModifiedSet| has been removed. Use the |OptionSet| event with pattern
   "modified" instead.
-• |ui-messages| `msg_show.bufwrite` and `msg_show.completion` messages are now
-  `msg_show.progress` events.
+• |ui-messages| `msg_show.completion` messages are now `msg_show.progress`
+  events.
 
 LSP
 
@@ -242,8 +254,12 @@ API
 • |nvim_create_autocmd()| is now |api-fast|, so it can be called from a fast
   event context (e.g. |vim.uv| callbacks).
 • |nvim_create_autocmd()| callback |event-args| provide `win`.
-• |nvim_chan_set()| sets channel properties. With `detach=false`, any RPC
-  channel can enable Nvim "self-exit on channel-close" behavior.
+• |nvim_chan_set()| sets channel properties.
+  • `detach=false` enables Nvim "self-exit on channel-close" behavior.
+  • `trust=false` rejects API calls from an untrusted peer. Also supported by
+    |sockconnect()|.
+  • `addr` stores the address the client uses to reach Nvim (e.g. a tunnel),
+    which may differ from |v:servername|. |:restart| reconnects UIs through it.
 
 BUILD
 
@@ -266,6 +282,8 @@ DEFAULTS
 
 • 'rulerformat' default is exposed as a statusline expression (previously it
   was implemented as an internal C routine).
+• Default 'statusline' shows the hostname (|hl-StatusLineRemote|) if Nvim runs
+  in an SSH session, e.g. |remote-ssh|.
 • 'termpastefilter' no longer removes TAB chars ("HT") when pasting into
   |:terminal|.
 
@@ -279,13 +297,10 @@ DIAGNOSTICS
 EDITOR
 
 • Multiple cursors (|multicursor|): edit in many places at once.
-  • Toggle cursors with |Q|, |<C-LeftMouse>|, or via API (the
-    "nvim.multicursor" extmarks namespace).
-  • Toggle "follow mode" with |q=|.
+  • Toggle cursors with |Q|, |<C-LeftMouse>|, or |mcursor-api|.
+  • Toggle "follow mode" with |q=| or the 'follow' option.
   • Clear cursors with |CTRL-L|, restore them with |gQ|.
-  • |zq| places a cursor at all targets of a motion. E.g. "zqgn" places at
-    every match (and "gv" selects the matches), "Vzqw" places at every
-    Visual-selected word.
+  • |zq| places cursors at all targets of a motion.
 • |:bcd| sets a buffer-local directory. |getcwd()| and |haslocaldir()| take
   `bufnr` as a third parameter.
 • |:lcd!| |:tcd!| |:bcd!| unsets the directory of that scope.
@@ -310,6 +325,10 @@ EDITOR
 • |:restart| saves/restores the current session (window layout, buffers, …).
   • |:restart!| (with a bang "!") does not save/restore the session.
 • |ZR| restarts Nvim (|:restart|).
+• |:connect| supports `ssh://` URIs. |remote-ssh|
+• |:connect| without arguments shows a menu of known servers and ssh hosts.
+• |:connect| stops the current server if no other UI is attached, or fails if
+  :qall would fail (unsaved changes). ":connect!" (with bang "!") was removed.
 • |:detach| with range "%" detaches all UIs except the current one.
 • |:detach!| (with bang "!") marks the current UI as detachable: Nvim will
   continue running if the UI disconnects unexpectedly (e.g. if you
@@ -340,6 +359,9 @@ EDITOR
 
 EVENTS
 
+• The |hit-enter| prompt processes events (|vim.schedule()| callbacks, timers,
+  RPC requests) while waiting, like |getchar()|, so |nvim_get_mode()| reports
+  `blocking=false`. Redrawing is postponed until the prompt is dismissed.
 • |:delmarks| now triggers the |MarkSet| autocommand with line==col==0, same
   as |nvim_buf_del_mark()|
 • |ChanClose| is triggered after a channel is closed, before it is removed.
@@ -350,6 +372,8 @@ EVENTS
 • |TabMoved| is triggered when tabs are reordered.
 • |DirReadPost| is triggered after each |dir| listing is rendered, so it can
   be sorted or filtered. See |dir-render|.
+• CTRL-C sends SIGINT to ":!" and "system()" child processes (before
+  escalating to SIGTERM/SIGKILL, as usual).
 
 HIGHLIGHTS
 
@@ -400,6 +424,8 @@ LSP
 
 LUA
 
+• CTRL-C during |SystemObj:wait()| fails with "interrupted" (and stops the
+  process) instead of returning a "timeout" (code 124) result.
 • |lua-async|: `vim.async` provides structured concurrency primitives for Lua
   code, including task handles, await helpers, cooperative cancellation,
   completion-order iteration, and semaphores.
@@ -409,6 +435,16 @@ LUA
   your terminal supports it.
 • |vim.net.request()| can specify custom headers by passing `opts.headers`.
 • |vim.net.request()| can now accept  `method` param overload for multiple HTTP methods.
+• |vim.net.request()| works with |vim.async.await()|: closing the task cancels
+  the request.
+• |vim.rpcrequest()| can specify `opts.timeout`.
+• |SystemObj:wait()| accepts a `cond` predicate which allows you to wait for
+  a condition instead of process termination.
+• |SystemObj:close()| stops the process. Closing a |vim.async| task that
+  awaits |vim.system()| stops the process.
+• When stopping a process, |vim.system()| |SystemObj:wait()| sends SIGTERM,
+  then escalates to SIGKILL after 2s. Once it exits, its output ends, even if
+  a descendant process keeps the pipes open.
 • |writefile()| treats Lua and RPC strings as |Blob|, so it can be used to
   write binary data.
 • |vim.fs.abspath()| gained `cwd` and `plain` parameters.
@@ -437,6 +473,13 @@ LUA
 • |vim.pos.cursor()| without arguments returns the cursor position of the
   current window.
 • |vim.ui.input()| now allows setting input scope.
+• |vim.uri| is a module. The old `uri_xx` top-level functions were renamed,
+  e.g. `vim.uri_to_fname()` is now |vim.uri.to_fname()|.
+  • Parse/build URIs with |vim.uri.parse()|, |vim.uri.new()|,
+    |vim.uri.join()|.
+  • Check equality with |vim.uri.normalize()|.
+  • Parse/build querystrings with |vim.uri.encode_query()| and
+    |vim.uri.decode_query()|.
 • |vim.log| provides a logging interface.
 • |vim.pack.get()| output includes revision of a pending update.
 • |vim.pack.get()| can fetch new updates before computing the output.
@@ -467,11 +510,20 @@ OPTIONS
 • 'previewpopup' decides how the preview window is displayed.
 • 'messagesopt' items "pager" and "timeout" configure the |ui2| message pager
   key and how long a message stays in the message window.
+• 'completeopt' takes the new value "pathopt" to make the file name completion
+   consult the 'path' option |i_CTRL-X_CTRL-F|.
+• 'wrap' is now conceal-aware: lines wrap at their extmark-concealed width
+  (|nvim_buf_set_extmark()| `conceal`, |treesitter-highlight-conceal|). The
+  cursor, |screenpos()|, |wincol()| and mouse follow the reflowed layout.
+  • Not supported for legacy |:syn-conceal|, |matchadd()| and `ephemeral` conceal.
 
 PERFORMANCE
 
+• If :write or :edit is slow it emits `msg_show.progress` events.
 • LSP shares identical file watcher registrations, reducing startup work in
-  large workspaces.
+  large workspaces. On macOS and Windows, watchers with different glob
+  patterns share one native watcher per directory, which reduces cleanup work
+  on shutdown.
 • |treesitter-highlight| performance on large injection-heavy files improves
   by 50% to 100% by reusing edited child-tree ranges.
 • Nvim architecture allows pure-Lua implementations of some `vim.fn`
@@ -497,8 +549,12 @@ PLUGINS
 
 STARTUP
 
+• Prompts during |exiting| without a UI, or after a deadly signal, are
+  dismissed instead of waiting (indefinitely).
 • |--embed| with |--listen| waits for a UI on the listen address if stdin is
   not a pipe (e.g. tty or /dev/null), instead of exiting.
+• A damaged |shada| file (e.g. truncated by a crash) is repaired on the next
+  write and keeps any valid entries. |shada-error-handling|
 
 TERMINAL
 
@@ -547,10 +603,10 @@ VIMSCRIPT
 • |v:useractive| indicates user activity.
 • |serverlist()| with `info=true` returns details for each server (own + peers).
 • These Vimscript functions may be called from |api-fast| context (e.g.
-  |vim.uv| timer/handle callbacks): |keytrans()|, |char2nr()|, |nr2char()|,
-  |str2list()|, |strpart()|, |strcharpart()|, |strgetchar()|, |strchars()|,
-  |strcharlen()|, |strlen()|, |strdisplaywidth()|, |byteidx()|, |charidx()|,
-  |utf16idx()|, |tr()|, |trim()|.
+  |vim.uv| timer/handle callbacks): |getenv()|, |keytrans()|, |char2nr()|,
+  |nr2char()|, |str2list()|, |strpart()|, |strcharpart()|, |strgetchar()|,
+  |strchars()|, |strcharlen()|, |strlen()|, |strdisplaywidth()|, |byteidx()|,
+  |charidx()|, |utf16idx()|, |tr()|, |trim()|.
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
@@ -587,6 +643,10 @@ These existing features changed their behavior.
   `opts.plain=true` and now does not expand leading tildes ("~") in addition
   to environment variables ("expand_env" is still accepted, for backwards
   compatibility).
+• |vim.fs.abspath()| returns URLs (e.g. "fugitive:///a") as-is, so
+  |vim.filetype.add()| functions receive URI buffer names unchanged.
+• |vim.uri.from_fname()| resolves relative paths to absolute paths, and
+  converts UNC paths.
 • |:helptags| finds help tags with the "vimdoc" |treesitter| parser (and thus
   requires it to be installed).
 • `:helptags ALL` reports |E152| for "doc" directories it cannot write,

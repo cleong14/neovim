@@ -1670,6 +1670,7 @@ local options = {
           'noinsert',
           'noselect',
           'nosort',
+          'pathopt',
           'popup',
           'preinsert',
           'preselect',
@@ -1730,6 +1731,11 @@ local options = {
            nosort   Disable sorting of completion candidates based on fuzzy
         	    scores when "fuzzy" is enabled.  Candidates will appear
         	    in their original order.
+
+           pathopt  Additionally consult the 'path' option during filename
+        	    completion.  Depending on the patterns in 'path', setting
+        	    this option may result in performance degradation due to
+        	    path expansions |i_CTRL-X_CTRL-F|
 
            popup    Show extra information about the currently selected
         	    completion in a popup window.  Only works in combination
@@ -9179,6 +9185,7 @@ local options = {
       validation_cb = 'validate_statustabline_rulerformat',
       defaults = {
         if_true = table.concat({
+          "%(%#(%#StatusLineRemote# @%.30(%{ v:lua.require('vim._core.util').remote_host() }%<%) %#) %)",
           '%<', -- guards the default truncation from the left against a %< injected via rulerformat
           '%f',
           "%( %h%w%m%r%{ v:lua.require('vim._core.util').term_exitcode() }%)",
@@ -9230,7 +9237,6 @@ local options = {
         	    when minwid is larger than the length of the item.
         0	    Leading zeroes in numeric items.  Overridden by "-".
         minwid	    Minimum width of the item, padding as set by "-" & "0".
-        	    Value must be 50 or less.
         maxwid	    Maximum width of the item.  Truncation occurs with a "<"
         	    on the left for text items.  Numeric items will be
         	    shifted down to maxwid-2 digits followed by ">"number

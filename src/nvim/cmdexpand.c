@@ -1080,7 +1080,7 @@ static void showmatches_oneline(expand_T *xp, char **matches, int numMatches, in
       msg_advance(maxlen + 1);
       msg_puts(p);
       msg_advance(maxlen + 3);
-      msg_outtrans_long(p + 2, HLF_D);
+      msg_outtrans_long(p + strlen(p) + 1, HLF_D);
       break;
     }
     for (int i = maxlen - lastlen; --i >= 0;) {
@@ -2650,6 +2650,9 @@ void set_cmd_context(expand_T *xp, char *str, int len, int col, int use_ccline)
   }
   const char *nextcomm = str;
 
+  filetype_expand_what = EXP_FILETYPECMD_ALL;
+  breakpt_expand_what = EXP_BREAKPT_ADD;
+
   if (use_ccline && ccline->cmdfirstc == '=') {
     // pass CMD_SIZE because there is no real command
     set_context_for_expression(xp, str, CMD_SIZE);
@@ -4121,6 +4124,10 @@ void f_getcompletion(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   case EXPAND_FILETYPECMD:
     filetype_expand_what = EXP_FILETYPECMD_ALL;
+    break;
+
+  case EXPAND_BREAKPOINT:
+    breakpt_expand_what = EXP_BREAKPT_ADD;
     break;
 
   default:

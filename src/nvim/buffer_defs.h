@@ -746,6 +746,7 @@ struct file_buffer {
 
   MarkTree b_marktree[1];
   Map(uint32_t, uint32_t) b_extmark_ns[1];         // extmark namespaces
+  int b_conceal_providers;  // See nvim__buf_set_conceal_provider().
 
   // Store the line count as it was before appending or inserting lines.
   // Used to determine a valid range before splicing marks, when the line
@@ -1242,9 +1243,10 @@ struct window_S {
   // w_valid is a bitfield of flags, which indicate if specific values are
   // valid or need to be recomputed.
   int w_valid;
-  pos_T w_valid_cursor;             // last known position of w_cursor, used to adjust w_valid
+  pos_T w_valid_cursor;             // cursor position used to check cached cursor row and column
   colnr_T w_valid_leftcol;          // last known w_leftcol
   colnr_T w_valid_skipcol;          // last known w_skipcol
+  linenr_T w_topline_cursor_lnum;   // cursor line for which the view was last chosen
 
   bool w_viewport_invalid;
   linenr_T w_viewport_last_topline;  // topline when the viewport was last updated
@@ -1270,7 +1272,7 @@ struct window_S {
   // This is related to positions in the window, not in the display or
   // buffer, thus w_wrow is relative to w_winrow.
   int w_wrow, w_wcol;               // cursor position in window
-  int w_wcol_conceal_off;           // screen cells concealed before w_wcol on
+  int w_wcol_conceal_off;           // Screen cells concealed before w_wcol on
                                     // the cursor's screen line, set by win_line()
 
   linenr_T w_botline;               // number of the line below the bottom of

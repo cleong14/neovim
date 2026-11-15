@@ -226,6 +226,8 @@ bool buf_ensure_loaded(buf_T *buf)
     return true;
   }
 
+  bufref_T bufref;
+  set_bufref(&bufref, buf);
   CtxSwitch aco = { 0 };
 
   // Make sure the buffer is in a window.
@@ -233,7 +235,8 @@ bool buf_ensure_loaded(buf_T *buf)
   // status can be OK or NOTDONE (which also means ok/done)
   int status = open_buffer(false, NULL, 0);
   ctx_restore(&aco);
-  return (status != FAIL);
+  // Autocommands may have wiped out or unloaded the buffer.
+  return status != FAIL && bufref_valid(&bufref) && buf->b_ml.ml_mfp != NULL;
 }
 
 /// Open current buffer, that is: open the memfile and read the file into
@@ -1024,6 +1027,7 @@ static void free_buffer_stuff(buf_T *buf, int free_flags)
   uc_clear(&buf->b_ucmds);               // clear local user commands
   extmark_free_all(buf);                 // delete any extmarks
   mc_buf_free(buf);                      // Multicursors died with their extmarks.
+  buf->b_conceal_providers = 0;
   map_clear_mode(buf, MAP_ALL_MODES, true, false);  // clear local mappings
   map_clear_mode(buf, MAP_ALL_MODES, true, true);   // clear local abbrevs
   XFREE_CLEAR(buf->b_start_fenc);
@@ -3129,7 +3133,9 @@ int setfname(buf_T *buf, char *ffname_arg, char *sfname_arg, bool message)
         return FAIL;
       }
       // delete from the list
+      buf->b_locked++;
       close_buffer(NULL, obuf, DOBUF_WIPE, false, false, false);
+      buf->b_locked--;
     }
     sfname = xstrdup(sfname);
 #ifdef CASE_INSENSITIVE_FILENAME

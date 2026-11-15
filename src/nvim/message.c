@@ -67,6 +67,7 @@
 #include "nvim/register.h"
 #include "nvim/runtime.h"
 #include "nvim/runtime_defs.h"
+#include "nvim/state.h"
 #include "nvim/state_defs.h"
 #include "nvim/strings.h"
 #include "nvim/types_defs.h"
@@ -1111,16 +1112,30 @@ char *msg_may_trunc(bool force, char *s)
 /// Shows a progress-message.  A non-"running" `status` ends the message and announces the
 /// progress task as "done".
 ///
-/// @param s    Message text.  NULL ends the message without showing anything.
-/// @param err  Show as an error message.
-char *msg_progress(char *s, char *id, char *status, int hl_id, bool hist, bool trunc, bool err)
+/// @param s        Message text.  NULL ends the message without showing anything.
+/// @param percent  Progress percentage, or -1 if unknown.
+/// @param err      Show as an error message.
+char *msg_progress(char *s, char *id, char *status, int percent, int hl_id, bool hist, bool trunc,
+                   bool err)
 {
-  bool clear = false;
   MessageData data = {
     .source = cstr_as_string("nvim"),
     .status = cstr_as_string(status),
-    .percent = -1,
+    .percent = percent,
   };
+  return msg_with_id(s, id, "progress", &data, hl_id, hist, trunc, err);
+}
+
+/// Shows message `s` with `id`: replaces the message with the same `id`, if any.
+///
+/// @param s     Message text.  NULL ends a progress-message without showing anything.
+/// @param kind  Message kind, e.g. "progress".
+/// @param data  Progress-message data, or NULL.
+/// @param err   Show as an error message.
+char *msg_with_id(char *s, char *id, const char *kind, MessageData *data, int hl_id, bool hist,
+                  bool trunc, bool err)
+{
+  bool clear = false;
   HlMessage chunks = KV_INITIAL_VALUE;
   if (s != NULL) {
     if (hist && (!trunc || ui_has(kUIMessages))) {
@@ -1132,7 +1147,7 @@ char *msg_progress(char *s, char *id, char *status, int hl_id, bool hist, bool t
     kv_push(chunks, ((HlMessageChunk){ cstr_as_string(s), hl_id }));
   }
   msg_ext_no_fast();
-  msg_multihl(CSTR_AS_OBJ(id), chunks, "progress", false, err, &data, &clear, false);
+  msg_multihl(CSTR_AS_OBJ(id), chunks, kind, false, err, data, &clear, false);
   kv_destroy(chunks);
   ui_flush();
   return s;
@@ -1378,7 +1393,7 @@ void msg_end_prompt(void)
   lines_left = -1;
 }
 
-/// Wait for the user to hit a key (normally Enter)
+/// Waits for the user to hit a key (normally Enter), processing events (state_wait_key()).
 ///
 /// @param redraw  if true, redraw the entire screen UPD_NOT_VALID
 ///                if false, do a normal redraw
@@ -1404,7 +1419,7 @@ void wait_return(int redraw)
     return;
   }
 
-  if (headless_mode && !ui_active()) {
+  if ((headless_mode && !ui_active()) || input_unanswerable()) {
     return;
   }
 
@@ -1458,6 +1473,18 @@ void wait_return(int redraw)
         // Remember "got_int", if it is set vgetc() probably returns a
         // CTRL-C, but we need to loop then.
         had_got_int = got_int;
+
+        // Process events while waiting, avoid OOM. #42669
+        const int prompt_row = msg_row;
+        const int prompt_col = msg_col;
+        if (!state_wait_key()) {
+          if (msg_row != prompt_row || msg_col != prompt_col) {
+            hit_return_msg(false);  // Show the prompt again, below the messages.
+          }
+          msg_cursor_goto(msg_row, msg_col);  // Events may move the cursor.
+          c = K_IGNORE;
+          continue;
+        }
 
         // Don't do mappings here, we put the character back in the
         // typeahead buffer.
@@ -3051,10 +3078,8 @@ static bool do_more_prompt(int typed_char)
   msgchunk_T *mp_last = NULL;
   msgchunk_T *mp;
 
-  // If headless mode is enabled and no input is required, this variable
-  // will be true. However If server mode is enabled, the message "--more--"
-  // should be displayed.
-  bool no_need_more = headless_mode && !embedded_mode && !ui_active();
+  // Skip more-prompt if no one can answer it: --headless without --embed/UI, or input_unanswerable.
+  bool no_need_more = (headless_mode && !embedded_mode && !ui_active()) || input_unanswerable();
 
   // We get called recursively when a timer callback outputs a message. In
   // that case don't show another prompt. Also when at the hit-Enter prompt

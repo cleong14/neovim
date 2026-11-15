@@ -63,6 +63,11 @@ local F = vim.F
 --- the awaiter or change which task owns it. Ownership is decided when the task
 --- is created.
 ---
+--- A task stays alive until it and its attached children finish cleanup.
+--- Dropping its handle does not stop the work. Keep the handle and call
+--- [Task:close()] when work is no longer needed, then observe completion to
+--- wait for cleanup.
+---
 --- Scheduling is cooperative. When a task awaits a timer, I/O operation,
 --- callback, or another task, `vim.async` saves the Lua stack and returns
 --- control to the event loop. Other callbacks can run while the task is paused.
@@ -308,7 +313,14 @@ end
 
 if type(vim) == 'table' then
   runtime.config({
-    wait = vim.wait,
+    -- CTRL-C interrupts a sync wait (see Task:wait()).
+    wait = function(timeout, predicate)
+      local done, code = vim.wait(timeout, predicate)
+      if code == -2 then
+        error('interrupted', 0)
+      end
+      return done
+    end,
     schedule = vim.schedule,
     new_timer = vim.uv.new_timer,
   })

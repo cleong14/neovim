@@ -506,7 +506,7 @@ describe('API', function()
       api.nvim_input([[:echo "hi\nhi2"<CR>]])
 
       -- Verify hit-enter prompt.
-      eq({ mode = 'r', blocking = true }, api.nvim_get_mode())
+      eq({ mode = 'r', blocking = false }, api.nvim_get_mode())
       api.nvim_input([[<C-c>]])
 
       -- Verify NO hit-enter prompt.
@@ -3164,7 +3164,7 @@ describe('API', function()
       eq({ mode = 'n', blocking = false }, api.nvim_get_mode())
     end)
 
-    it('during hit-enter prompt returns blocking=true', function()
+    it('during hit-enter prompt returns blocking=false', function()
       api.nvim_ui_attach(80, 20, {})
       eq({ mode = 'n', blocking = false }, api.nvim_get_mode())
       command("echom 'msg1'")
@@ -3174,7 +3174,10 @@ describe('API', function()
       command("echom 'msg5'")
       eq({ mode = 'n', blocking = false }, api.nvim_get_mode())
       api.nvim_input(':messages<CR>')
-      eq({ mode = 'r', blocking = true }, api.nvim_get_mode())
+      -- Events are processed during the prompt, RPC calls are *not* blocked.
+      eq({ mode = 'r', blocking = false }, api.nvim_get_mode())
+      eq(2, api.nvim_eval('1+1'))
+      eq({ mode = 'r', blocking = false }, api.nvim_get_mode())
     end)
 
     it('during getchar() returns blocking=false', function()
@@ -3212,7 +3215,7 @@ describe('API', function()
         },
         NIL,
       }, api.nvim_call_atomic(req))
-      eq({ mode = 'r', blocking = true }, api.nvim_get_mode())
+      eq({ mode = 'r', blocking = false }, api.nvim_get_mode())
     end)
     it('during insert-mode map-pending, returns blocking=true #6166', function()
       command('inoremap xx foo')
@@ -4676,8 +4679,6 @@ describe('API', function()
       ['~'] = 'supports ASCII fillchar',
       ['━'] = 'supports single-width multibyte fillchar',
       ['c̳'] = 'supports single-width fillchar with composing',
-      ['哦'] = 'treats double-width fillchar as single-width',
-      ['\031'] = 'treats control character fillchar as single-width',
     }) do
       it(desc, function()
         eq(
@@ -4692,23 +4693,33 @@ describe('API', function()
           { str = 'a' .. fc:rep(3) .. 'b', width = 5 },
           api.nvim_eval_statusline('a%=b', { fillchar = fc, use_tabline = true, maxwidth = 5 })
         )
-        eq(
-          { str = 'a' .. fc:rep(3) .. 'b', width = 5 },
-          api.nvim_eval_statusline('a%=b', { fillchar = fc, use_statuscol_lnum = 1, maxwidth = 5 })
-        )
       end)
     end
 
+    it('rejects control-character fillchar', function()
+      eq(
+        "Invalid 'fillchar': expected one single-width character",
+        pcall_err(api.nvim_eval_statusline, '', { fillchar = '\031' })
+      )
+    end)
+
+    it('rejects double-width fillchar', function()
+      eq(
+        "Invalid 'fillchar': expected one single-width character",
+        pcall_err(api.nvim_eval_statusline, '', { fillchar = '哦' })
+      )
+    end)
+
     it('rejects multiple-character fillchar', function()
       eq(
-        "Invalid 'fillchar': expected single character",
+        "Invalid 'fillchar': expected one single-width character",
         pcall_err(api.nvim_eval_statusline, '', { fillchar = 'aa' })
       )
     end)
 
     it('rejects empty string fillchar', function()
       eq(
-        "Invalid 'fillchar': expected single character",
+        "Invalid 'fillchar': expected one single-width character",
         pcall_err(api.nvim_eval_statusline, '', { fillchar = '' })
       )
     end)

@@ -4,8 +4,9 @@
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
 
 
-				*Cmdline-mode* *Command-line-mode* *Cmdline*
+==============================================================================
 Command-line mode		*cmdline* *Command-line* *mode-cmdline* *:*
+				*Cmdline-mode* *Command-line-mode* *Cmdline*
 
 Command-line mode is used to enter Ex commands (":"), search patterns
 ("/" and "?"), and filter commands ("!").
@@ -254,8 +255,9 @@ CTRL-M or CTRL-J		*c_CTRL-M* *c_CTRL-J* *c_<NL>* *c_<CR>* *c_CR*
 
 CTRL-[						*c_CTRL-[* *c_<Esc>* *c_Esc*
 <Esc>		When typed and 'x' not present in 'cpoptions', quit
-		Command-line mode without executing.  In macros or when 'x'
-		present in 'cpoptions', start entered command.
+		Command-line mode without executing, otherwise start entered
+		command (this is vi compatible).  Use CTRL-C in a mapping
+		to abandon the command-line (see below).
 		Note: If your <Esc> key is hard to hit on your keyboard, train
 		yourself to use CTRL-[.
 						*c_META* *c_ALT*
@@ -1245,9 +1247,8 @@ Key		Action ~
 <Enter>		Execute the command-line under the cursor, then close the
 		window(s) where cmdwin is visible.  Works both in Insert and
 		in Normal mode.
-CTRL-C		Continue in Command-line mode.  The command-line under the
-		cursor is pre-filled in the command-line.  Works both in
-		Insert and in Normal mode.
+CTRL-C		Continue in Command-line mode.  Pre-fills the command-line and
+		keeps cursor position. Works in both Insert and Normal mode.
 :quit		Discard the command line and go back to Normal mode.
 		":close", CTRL-W c, ":exit", ":xit" and CTRL-\ CTRL-N also
 		work.

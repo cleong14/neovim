@@ -1117,6 +1117,8 @@ static int64_t gethexchrs(int maxinputlen)
 
 // Get and return the value of the decimal string immediately after the
 // current position. Return -1 for invalid.  Consumes all digits.
+// Return the value of the decimal string, or either INT_MAX + 1 or
+// INT_MAX + 2 if it is larger than INT_MAX.
 static int64_t getdecchrs(void)
 {
   int64_t nr = 0;
@@ -1128,8 +1130,12 @@ static int64_t getdecchrs(void)
     if (c < '0' || c > '9') {
       break;
     }
-    nr *= 10;
-    nr += c - '0';
+    if (nr <= INT_MAX / 10) {
+      nr *= 10;
+      nr += c - '0';
+    } else {
+      nr = (int64_t)INT_MAX + 1;
+    }
     regparse++;
     curchr = -1;     // no longer valid
   }
@@ -1760,16 +1766,21 @@ static int cstrncmp(char *s1, char *s2, int *n)
     char *p = s1;
     int n2 = 0;
     int n1 = *n;
-    // count the number of characters for byte-length of s1
+    // count the number of base characters for the byte length of s1.
+    // composing characters must not be included: they are handled by the
+    // RE_COMPOSING atom or the composing check after the match, same as
+    // without 'ignorecase'.
     while (n1 > 0 && *p != NUL) {
-      n1 -= utfc_ptr2len(p);
-      MB_PTR_ADV(p);
+      int l = utf_ptr2len(p);
+      n1 -= l;
+      p += l;
       n2++;
     }
-    // count the number of bytes to advance the same number of chars for s2
+    // advance s2 over the same number of base characters, leaving any
+    // composing characters unconsumed
     p = s2;
     while (n2-- > 0 && *p != NUL) {
-      MB_PTR_ADV(p);
+      p += utf_ptr2len(p);
     }
 
     n2 = (int)(p - s2);
@@ -7482,7 +7493,7 @@ static bool regmatch(uint8_t *scan, const proftime_T *tm, int *timed_out)
             if (limit > 0
                 && ((rp->rs_un.regsave.rs_u.pos.lnum
                      < behind_pos.rs_u.pos.lnum
-                     ? (colnr_T)strlen((char *)rex.line)
+                     ? reg_getline_len(rex.lnum)
                      : behind_pos.rs_u.pos.col)
                     - rp->rs_un.regsave.rs_u.pos.col >= limit)) {
               no = FAIL;
@@ -7494,8 +7505,7 @@ static bool regmatch(uint8_t *scan, const proftime_T *tm, int *timed_out)
                 no = FAIL;
               } else {
                 reg_restore(&rp->rs_un.regsave, &backpos);
-                rp->rs_un.regsave.rs_u.pos.col =
-                  (colnr_T)strlen((char *)rex.line);
+                rp->rs_un.regsave.rs_u.pos.col = reg_getline_len(rex.lnum);
               }
             } else {
               const uint8_t *const line =
@@ -12287,7 +12297,7 @@ static nfa_state_T *post2nfa(int *postfix, int *end, int nfa_calc_size)
       if (s == NULL) {
         goto theend;
       }
-      PUSH(frag(s, append(e.out, list1(&s->out1))));
+      PUSH(frag(s, append(list1(&s->out1), e.out)));
       break;
 
     case NFA_QUEST_NONGREEDY:
@@ -12301,7 +12311,7 @@ static nfa_state_T *post2nfa(int *postfix, int *end, int nfa_calc_size)
       if (s == NULL) {
         goto theend;
       }
-      PUSH(frag(s, append(e.out, list1(&s->out))));
+      PUSH(frag(s, append(list1(&s->out), e.out)));
       break;
 
     case NFA_END_COLL:
@@ -12385,7 +12395,7 @@ static nfa_state_T *post2nfa(int *postfix, int *end, int nfa_calc_size)
           e1 = e;
         }
         patch(e.out, s1);
-        append(e1.out, list1(&s->out1));
+        e1.out = append(list1(&s->out1), e1.out);
         s1 = s;
       }
       PUSH(frag(s, e1.out));
@@ -15023,13 +15033,12 @@ static int nfa_regmatch(nfa_regprog_T *prog, nfa_state_T *start, regsubs_T *subm
         break;
 
       case NFA_KWORD:           //  \k
-        result = vim_iswordp_buf((char *)rex.input, rex.reg_buf);
+        result = vim_iswordc_buf(curc, rex.reg_buf);
         ADD_STATE_IF_MATCH(t->state);
         break;
 
       case NFA_SKWORD:          //  \K
-        result = !ascii_isdigit(curc)
-                 && vim_iswordp_buf((char *)rex.input, rex.reg_buf);
+        result = !ascii_isdigit(curc) && vim_iswordc_buf(curc, rex.reg_buf);
         ADD_STATE_IF_MATCH(t->state);
         break;
 
@@ -15044,12 +15053,12 @@ static int nfa_regmatch(nfa_regprog_T *prog, nfa_state_T *start, regsubs_T *subm
         break;
 
       case NFA_PRINT:           //  \p
-        result = vim_isprintc(utf_ptr2char((char *)rex.input));
+        result = vim_isprintc(curc);
         ADD_STATE_IF_MATCH(t->state);
         break;
 
       case NFA_SPRINT:          //  \P
-        result = !ascii_isdigit(curc) && vim_isprintc(utf_ptr2char((char *)rex.input));
+        result = !ascii_isdigit(curc) && vim_isprintc(curc);
         ADD_STATE_IF_MATCH(t->state);
         break;
 

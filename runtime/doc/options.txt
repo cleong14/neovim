@@ -3,7 +3,7 @@
 
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
 
-
+==============================================================================
 Options							*options*
 
 For an overview of options see quickref.txt |option-list|.
@@ -1726,6 +1726,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	   nosort   Disable sorting of completion candidates based on fuzzy
 		    scores when "fuzzy" is enabled.  Candidates will appear
 		    in their original order.
+
+	   pathopt  Additionally consult the 'path' option during filename
+		    completion.  Depending on the patterns in 'path', setting
+		    this option may result in performance degradation due to
+		    path expansions |i_CTRL-X_CTRL-F|
 
 	   popup    Show extra information about the currently selected
 		    completion in a popup window.  Only works in combination
@@ -6477,7 +6482,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 		    when minwid is larger than the length of the item.
 	0	    Leading zeroes in numeric items.  Overridden by "-".
 	minwid	    Minimum width of the item, padding as set by "-" & "0".
-		    Value must be 50 or less.
 	maxwid	    Maximum width of the item.  Truncation occurs with a "<"
 		    on the left for text items.  Numeric items will be
 		    shifted down to maxwid-2 digits followed by ">"number

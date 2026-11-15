@@ -3370,6 +3370,26 @@ func Test_range()
   call assert_fails('let x=range([])', 'E745:')
   call assert_fails('let x=range(1, [])', 'E745:')
   call assert_fails('let x=range(1, 4, [])', 'E745:')
+
+  " the number of items must fit in an int
+  "call assert_equal(2147483647, len(range(2147483647)))
+  call assert_fails('let x=range(2147483648)',
+        \ 'E1510: Value too large: 2147483648')
+  call assert_fails('let x=range(0, 2147483647)',
+        \ 'E1510: Value too large: 2147483648')
+  call assert_fails('let x=range(0, 4294967294, 2)',
+        \ 'E1510: Value too large: 2147483648')
+  call assert_fails('let x=range(0, 9223372036854775807)',
+        \ 'E1510: Value too large: 9223372036854775808')
+
+  " the stride must fit in an int
+  call assert_fails('let x=range(0, 100, 3000000000)',
+        \ 'E1510: Value too large: 3000000000')
+  call assert_fails('let x=range(0, 100, -3000000000)',
+        \ 'E1510: Value too large: -3000000000')
+
+  " slicing a range list with an overflowing length crashed
+  call assert_fails('let x=range(2147483648)[: 4]', 'E1510:')
 endfunc
 
 func Test_garbagecollect_now_fails()
@@ -3744,6 +3764,16 @@ func Test_glob2()
   endif
 endfunc
 
+" shell is not used to expand a single quote
+func Test_glob3()
+  CheckUnix
+  let shell = &shell
+  set shell=DOESNOTEXIST
+  call writefile([], "Xit's_a_file", 'D')
+  call assert_equal(["Xit's_a_file"], glob("Xit's*", 0, 1))
+  let &shell = shell
+endfunc
+
 func Test_glob_symlinks()
   call writefile([], 'Xglob1')
 
@@ -3991,6 +4021,25 @@ func Test_glob_extended_mswin()
   let expected = ['Xtestglob/foo/bar/src/foo.cpp', 'Xtestglob/foo/bar/src/foo.h', 'Xtestglob/foo/bar/src/foo.sh']
   call assert_equal(expected, sort(glob('Xtestglob/**/foo.*', 0, 1)))
   call delete('Xtestglob', 'rf')
+endfunc
+
+" Test for glob() with filenames starting with a -
+func Test_glob_shell_expansion_minus()
+  CheckUnix
+  CheckExecutable bash
+
+  let shell = &shell
+  set shell=bash
+  call mkdir('Xvimglob', 'R')
+  call writefile([], 'Xvimglob/-n')
+  let cwd = getcwd()
+  call chdir('Xvimglob')
+  try
+    call assert_equal(['-n'], glob("{-n,E}", 0, 1))
+  finally
+    let &shell = shell
+    call chdir(cwd)
+  endtry
 endfunc
 
 " Tests for the slice() function.

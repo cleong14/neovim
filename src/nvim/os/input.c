@@ -43,7 +43,7 @@ static char *input_read_pos = input_buffer;
 static char *input_write_pos = input_buffer;
 
 static bool blocking = false;
-static int cursorhold_time = 0;  ///< time waiting for CursorHold event
+static uint64_t cursorhold_time = 0;  ///< Time (ns) spent waiting for CursorHold event.
 static int cursorhold_tb_change_cnt = 0;  ///< tb_change_cnt when waiting started
 
 #include "os/input.c.generated.h"
@@ -120,7 +120,7 @@ int input_get(uint8_t *buf, int maxlen, int ms, int tb_change_cnt, MultiQueue *e
     }
   } else {
     uint64_t wait_start = os_hrtime();
-    cursorhold_time = MIN(cursorhold_time, (int)p_ut);
+    cursorhold_time = MIN(cursorhold_time, (uint64_t)p_ut * 1000000);
     // When an autocomplete is pending, wake at the sooner of
     // 'autocompletedelay' and 'updatetime' so the delay does not postpone
     // CursorHold.  Once CursorHold has fired, only the delay is left.
@@ -133,7 +133,7 @@ int input_get(uint8_t *buf, int maxlen, int ms, int tb_change_cnt, MultiQueue *e
                          && (get_real_state() & MODE_INSERT) != 0;
     // Measure the delay from when it was armed (the keystroke), so a
     // CursorHold returning in between does not push the popup back.
-    int64_t wait_time = p_ut - cursorhold_time;
+    int64_t wait_time = p_ut - (int64_t)(cursorhold_time / 1000000);
     if (delay_pending) {
       int64_t delay_left = p_acl - ins_compl_autocomplete_elapsed();
       wait_time = MIN(MAX(delay_left, 0), wait_time);
@@ -168,7 +168,7 @@ int input_get(uint8_t *buf, int maxlen, int ms, int tb_change_cnt, MultiQueue *e
         inbuf_poll(-1, events);
       }
     } else {
-      cursorhold_time += (int)((os_hrtime() - wait_start) / 1000000);
+      cursorhold_time += os_hrtime() - wait_start;
     }
   }
 
@@ -527,21 +527,40 @@ static bool inbuf_poll(int ms, MultiQueue *events)
     return true;
   }
 
-  if (do_profiling == PROF_YES && ms) {
+  if (ms == 0) {
+    LOOP_PROCESS_EVENTS(&main_loop, NULL, 0);
+    return os_input_ready(events);
+  }
+
+  if (do_profiling == PROF_YES) {
     prof_input_start();
   }
 
-  if ((ms == -1 || ms > 0) && events != main_loop.events) {
+  if (events != main_loop.events) {
     // The pending input provoked a blocking wait. Do special events now. #6247
     blocking = true;
     multiqueue_process_events(ch_before_blocking_events);
   }
   DLOG("blocking... events=%s", !!events ? "true" : "false");
-  LOOP_PROCESS_EVENTS_UNTIL(&main_loop, NULL, ms, os_input_ready(events));
+  LOOP_PROCESS_EVENTS_UNTIL(&main_loop, NULL, ms, os_input_ready(events) || input_unanswerable());
   blocking = false;
 
-  if (do_profiling == PROF_YES && ms) {
+  if (do_profiling == PROF_YES) {
     prof_input_end();
+  }
+
+  if (input_unanswerable() && !os_input_ready(events)) {
+    // Dismiss the prompt (CTRL-C) instead of waiting forever.
+    static bool did_log = false;  // Log once (the interrupt may be caught...).
+    if (!did_log) {
+      did_log = true;
+      char mode[MODE_MAX_LENGTH];
+      get_mode(mode);
+      WLOG("Interrupted prompt (mode=%s): user input is unlikely", mode);
+    }
+    input_enqueue_raw("\003", 1);
+    // Also interrupt the code that prompted. Skips remaining exit autocmds.
+    got_int = true;
   }
 
   return os_input_ready(events);

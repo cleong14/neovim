@@ -4,6 +4,7 @@
 			    NVIM REFERENCE MANUAL
 
 
+==============================================================================
 Nvim UI protocol					*UI* *ui* *api-ui-events*
 
 This document describes the UI protocol. See |gui| and |tui| for user-facing
@@ -257,9 +258,12 @@ the editor.
 							*ui-event-restart*
 ["restart", listen_addr, chan_config] ~
 	User invoked the |:restart| command. Nvim started a new server. The
-	old server is about to exit and close its channel. `chan_config` gives
-	the channel-specific properties from the old server, which the UI
-	should pass to |nvim_chan_set()| intact.
+	old server is about to exit and close its channel.
+
+	- `listen_addr`: The new server's address, or the channel-stored
+	  `addr` (|nvim_chan_set()|).
+	- `chan_config`: Channel properties from the old server, which the UI
+	  should restore intact via |nvim_chan_set()|.
 
 	UI is expected to:
 	1. Wait for the channel to be closed, to confirm that the old server
@@ -856,6 +860,7 @@ must handle.
 	    Name indicating the message kind. New kinds may be added in the
 	    future; clients should treat unknown kinds as the empty kind.
 	      • "" (empty): Unknown (consider a |feature-request|)
+	      • "bufwrite": |:write| message. If :write is slow it emits "progress".
 	      • "empty": Empty message (`:echo ""`), with empty `content`. Should
 	        clear messages sharing the 'cmdheight' area if it is the only
 	        message in a batch.
@@ -871,7 +876,8 @@ must handle.
 	      • "lua_print": |print()| from |:lua| code
 	      • "progress": Progress message emitted by |nvim_echo()|. Internal
 	        progress messages use these ids:
-		• `nvim.bufwrite "<filename>"`
+		• `nvim.bufread "<filename>"` (slow file read, e.g. |:edit|)
+		• `nvim.bufwrite "<filename>"` (slow |:write|)
 		• `nvim.completion`
 		• `nvim.indent`
 	      • "quickfix": Quickfix navigation message

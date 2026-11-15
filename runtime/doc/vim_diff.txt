@@ -4,6 +4,7 @@
                             NVIM REFERENCE MANUAL
 
 
+==============================================================================
 Differences between Nvim and Vim                               *vim-differences*
 
 Nvim differs from Vim in many ways, although editor and Vimscript (not
@@ -149,7 +150,6 @@ you never want any default mappings, call |:mapclear| early in your config.
 - <C-W> |i_CTRL-W-default|
 - <C-L> |CTRL-L-default|
 - & |&-default|
-- - |dir-mappings|
 - @ |v_@-default|
 - # |v_#-default|
 - * |v_star-default|
@@ -622,6 +622,8 @@ Additional differences:
 - Some errors make ShaDa code keep temporary file in-place for user to decide
   what to do with it.  Vim deletes temporary file in these cases.
   |shada-error-handling|
+- A damaged ShaDa file (e.g. truncated by a crash) is repaired on the next
+  write and keeps any valid entries.  |shada-error-handling|
 - ShaDa file keeps search direction (|v:searchforward|), viminfo does not.
 
 |printf()| returns something meaningful when used with `%p` argument: in Vim

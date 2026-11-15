@@ -4,6 +4,7 @@
 		  VIM REFERENCE MANUAL	  by Bram Moolenaar
 
 
+==============================================================================
 Automatic commands					*autocmd* *autocommand*
 
 For a basic explanation, see section |40.3| in the user manual.
@@ -313,11 +314,10 @@ BufRead or BufReadPost				*BufRead* *BufReadPost*
 				processing modelines.  See |BufWinEnter| to do
 				something after processing modelines.
 				Also triggered:
-				- when writing an unnamed buffer in a way that
-				  the buffer gets a name
 				- after successfully recovering a file
-				- for the "filetypedetect" group when
-				  executing ":filetype detect"
+				- for the filetypedetect group when executing
+				  ":filetype detect" or when writing an
+				  unnamed buffer in a way that it gets a name
 				Not triggered:
 				- for the `:read file` command
 				- when the file doesn't exist
@@ -1049,6 +1049,11 @@ Progress						*Progress*
 				- status: status of the progress message
 				- percent: how much progress has been made
 				- data: arbitrary data sent with the message
+
+				Emitted during a slow file read (|:edit|, |:read|)
+				or |:write|. While reading a file (id
+				`nvim.bufread "<filename>"`), handlers must
+				not change the current buffer or its text.
 
 				Usage example:
 >lua

@@ -255,18 +255,32 @@
 ---A simple example:
 ---```json
 ---{
----  "name": "best-plugin.nvim",
----  "description": "The best plugin for Neovim",
----  "engines": {
----      "nvim": ">=0.13.0",
----      "vim": ">=9.1.0"
----  },
----  "scripts": {
----    "install": "scripts/install.lua",
----    "preupdate": "scripts/preupdate.vim",
----    "update": "scripts/update.vim",
----    "preuninstall": "scripts/preuninstall.lua"
----  }
+---   "name": "best-plugin.nvim",
+---   "description": "The best plugin for Neovim",
+---   "version": "1.0.0",
+---   "engines": {
+---     "nvim": ">=0.13.0",
+---     "vim": ">=9.1.0"
+---   },
+---   "scripts": {
+---     "install": "scripts/install.lua",
+---     "preupdate": "scripts/preupdate.vim",
+---     "update": "scripts/update.vim",
+---     "preuninstall": "scripts/preuninstall.lua"
+---   },
+---   "dependencies": [
+---     {
+---       "src": "https://github.com/user/plugin1"
+---     },
+---     {
+---       "src": "https://github.com/user/plugin2",
+---       "version": ">=1.0.0"
+---     },
+---     {
+---       "src": "https://github.com/user/plugin3",
+---       "version": "'branch'"
+---     }
+---   ]
 ---}
 ---```
 
@@ -571,14 +585,29 @@ local n_active_plugins = 0
 --- @field update? string Post update script.
 --- @field preuninstall? string Pre delete script.
 
+--- @class vim.pack.ManifestDependency
+--- @inlinedoc
+--- Source to install from. Must match exactly the |vim.pack.Spec| source in |vim.pack.add()|.
+--- @field src string
+--- Suggested version. If describes a version constraint, used |vim.pack.Spec| `version`
+--- should be a |vim.VersionRange| that entirely fits into the constraint.
+--- If quoted string, describes the branch/tag/commit and |vim.pack.Spec| `version`
+--- should define the string exactly.
+--- If missing, no version is suggested.
+--- @field version? string
+
 --- @class vim.pack.Manifest
 --- @field name? string Plugin name
 --- @field description? string Plugin description
+--- @field version? string Plugin version as a semver string (like "1.0.0", "0.0.1-dev").
 --- Supported engine versions. Values should be |vim.version.range()| compatible specs.
 --- @field engines? vim.pack.ManifestEngines
 --- Script locations (relative to plugin's root) to |:source| after triggering
 --- corresponding |vim.pack-events|.
 --- @field scripts? vim.pack.ManifestScripts
+--- A list of data that plugin declares as its plugin dependencies.
+--- All should be installable with |vim.pack.add()|. Each data has the following fields:
+--- @field dependencies? vim.pack.ManifestDependency[]
 
 --- @param path string
 --- @return vim.pack.Manifest?

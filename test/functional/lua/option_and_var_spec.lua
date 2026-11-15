@@ -128,12 +128,11 @@ describe('lua stdlib', function()
       eq(NIL, exec_lua([[return vim.g.Unknown_script_func]]))
 
       -- Check if autoload works properly
-      local pathsep = n.get_pathsep()
       local xhome = 'Xhome_lua'
-      local xconfig = xhome .. pathsep .. 'Xconfig'
-      local xdata = xhome .. pathsep .. 'Xdata'
-      local autoload_folder = table.concat({ xconfig, 'nvim', 'autoload' }, pathsep)
-      local autoload_file = table.concat({ autoload_folder, 'testload.vim' }, pathsep)
+      local xconfig = vim.fs.joinpath(xhome, 'Xconfig')
+      local xdata = vim.fs.joinpath(xhome, 'Xdata')
+      local autoload_folder = vim.fs.joinpath(xconfig, 'nvim', 'autoload')
+      local autoload_file = vim.fs.joinpath(autoload_folder, 'testload.vim')
       mkdir_p(autoload_folder)
       write_file(autoload_file, [[let testload#value = 2]])
 
@@ -845,6 +844,42 @@ describe('lua stdlib', function()
           eq_exec_lua('hello world', function()
             vim.opt.makeprg = 'hello world'
             return vim.opt.makeprg:get()
+          end)
+        end)
+
+        it('reads options in a non-modifiable buffer #42393', function()
+          command('setglobal fileencoding=utf-8 fileformat=unix')
+          command('setlocal fileencoding=latin1 fileformat=dos nomodifiable')
+          eq_exec_lua({ { 'latin1', 'dos' }, { 'latin1', 'dos' }, { 'utf-8', 'unix' } }, function()
+            local values = {}
+            for _, opts in ipairs({ vim.opt, vim.opt_local, vim.opt_global }) do
+              values[#values + 1] = { opts.fileencoding:get(), opts.fileformat:get() }
+            end
+            return values
+          end)
+          eq(false, api.nvim_get_option_value('modifiable', {}))
+        end)
+
+        it('reads saved listchars after character widths change', function()
+          eq_exec_lua({ eol = '·' }, function()
+            vim.o.ambiwidth = 'single'
+            vim.opt.listchars = { eol = '·' }
+            local saved = vim.opt.listchars
+            vim.opt.listchars = { eol = '$' }
+            vim.o.ambiwidth = 'double'
+            return saved:get()
+          end)
+          eq('eol:$', api.nvim_get_option_value('listchars', {}))
+        end)
+
+        it('returns independent tables for computed option values', function()
+          eq_exec_lua({ { eol = '~', space = '.' }, { eol = '!' } }, function()
+            vim.opt.listchars = { eol = '~' }
+            local saved = vim.opt.listchars + { space = '.' }
+            local value = saved:get()
+            value.eol = '$'
+            vim.opt.listchars = { eol = '!' }
+            return { saved:get(), vim.opt.listchars:get() }
           end)
         end)
 

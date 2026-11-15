@@ -100,11 +100,14 @@ local function default_format_func(min_level, level, ...)
   -- Stack shape:
   --   default_format_func <- create_writer closure <- user callsite
   local info = debug.getinfo(3, 'Sl')
+  -- Full path (`short_src` is truncated), with $VIMRUNTIME abbreviated.
+  local src = info and (info.source:match('^@(.*)') or info.short_src) or '?'
+  local rt_path = vim.env.VIMRUNTIME and vim.fs.relpath(vim.env.VIMRUNTIME, src)
   local header = string.format(
     '[%s][%s] %s:%s',
     level_names[level],
     os.date(log_date_format),
-    info and info.short_src or '?',
+    rt_path and ('$VIMRUNTIME/%s'):format(rt_path) or src,
     info and info.currentline or -1
   )
   local parts = { header }
@@ -194,7 +197,7 @@ function M:open_file()
     return false
   end
 
-  self.logfile, self.openerr = io.open(self.filename, 'a+')
+  self.logfile, self.openerr = io.open(self.filename, 'a')
   if not self.logfile then
     local err_msg = string.format('Failed to open %s log file: %s', self.name, self.openerr)
     notify(err_msg, M.levels.ERROR)
@@ -230,11 +233,11 @@ function M:create_writer(level)
     if argc == 0 then
       return true
     end
-    if not self:open_file() then
-      return false
-    end
     local message = self.format_func(self.level, level, ...)
     if message then
+      if not self:open_file() then
+        return false
+      end
       assert(self.logfile)
       self.logfile:write(message)
       self.logfile:flush()

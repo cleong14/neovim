@@ -1742,7 +1742,7 @@ describe('vim.lsp.completion: integration', function()
         -- detail is in documentation, should not be duplicated
         detail = '_assert_integer',
         documentation = {
-          kind = 'markdown',
+          kind = 'plaintext',
           value = [[```lua\nmore doc for vim._assert_integer\n```]],
         },
         insertText = '_assert_integer(${1:x}, ${2:base?})',
@@ -1792,11 +1792,10 @@ describe('vim.lsp.completion: integration', function()
         nvim__id_array_1^                                  |
         {12:nvim__id_array_1 Function }{100:(method) nvim__id_array}{1: }|
         {4:nvim__id_array_2 Function }{100:_1(arr: any[]): any[]}{4:  }{1: }|
-        {4:for i = ..       Snippet  }{100:lua\nfunction vim.ap}{4:   }{1: }|
-        {4:for j = ..       Snippet  }{100:i.nvim__id_array_1(arr:}{1: }|
-        {4:_assert_integer  Function }{100: any[])\n  -> any[]\n}{4:  }{1: }|
-        {1:~                         }{4:                       }{1: }|
-        {1:~                                                 }|*12
+        {4:for i = ..       Snippet  }{100:lua\nfunction vim.api.n}{1: }|
+        {4:for j = ..       Snippet  }{100:vim__id_array_1(arr: an}{1: }|
+        {4:_assert_integer  Function }{100:y[])\n  -> any[]\n}{4:     }{1: }|
+        {1:~                                                 }|*13
         {5:-- INSERT --}                                      |
       ]])
       feed('<C-N>')
@@ -1804,11 +1803,10 @@ describe('vim.lsp.completion: integration', function()
         nvim__id_array_2^                                  |
         {4:nvim__id_array_1 Function }{100:(method) nvim__id_array}{1: }|
         {12:nvim__id_array_2 Function }{100:_2(arr: any[]): any[]}{4:  }{1: }|
-        {4:for i = ..       Snippet  }{100:lua\nfunction vim.ap}{4:   }{1: }|
-        {4:for j = ..       Snippet  }{100:i.nvim__id_array_2(arr:}{1: }|
-        {4:_assert_integer  Function }{100: any[])\n  -> any[]\n}{4:  }{1: }|
-        {1:~                         }{4:                       }{1: }|
-        {1:~                                                 }|*12
+        {4:for i = ..       Snippet  }{100:lua\nfunction vim.api.n}{1: }|
+        {4:for j = ..       Snippet  }{100:vim__id_array_2(arr: an}{1: }|
+        {4:_assert_integer  Function }{100:y[])\n  -> any[]\n}{4:     }{1: }|
+        {1:~                                                 }|*13
         {5:-- INSERT --}                                      |
       ]])
       feed('<C-N>')
@@ -1835,22 +1833,26 @@ describe('vim.lsp.completion: integration', function()
       ]])
       feed('<C-N>')
       retry(nil, nil, function()
-        local info = exec_lua(function()
+        local info, ts_highlight, conceallevel = exec_lua(function()
           local data = vim.fn.complete_info({ 'selected' })
           if not data.preview_bufnr or not vim.api.nvim_buf_is_valid(data.preview_bufnr) then
             error('preview not ready')
           end
-          return table.concat(vim.api.nvim_buf_get_lines(data.preview_bufnr, 0, -1, false), '\n')
+          return table.concat(vim.api.nvim_buf_get_lines(data.preview_bufnr, 0, -1, false), '\n'),
+            vim.b[data.preview_bufnr].ts_highlight or false,
+            vim.wo[data.preview_winid].conceallevel
         end)
         neq(nil, info:find('more doc for vim._assert_integer', 1, true))
         local _, count = info:gsub('_assert_integer', '')
         -- item 3: detail '_assert_integer' is in documentation, should not be duplicated
         eq(1, count)
+        eq(false, ts_highlight)
+        eq(0, conceallevel)
       end)
       screen:expect([[
         _assert_integer(x, base)^                          |
-        {4:nvim__id_array_1 Function }{100:lua\nmore doc for vi}{4:   }{1: }|
-        {4:nvim__id_array_2 Function }{100:m._assert_integer\n}{4:    }{1: }|
+        {4:nvim__id_array_1 Function ```lua\nmore doc for vi}{1: }|
+        {4:nvim__id_array_2 Function m._assert_integer\n``` }{1: }|
         {4:for i = ..       Snippet  }{1:                        }|
         {4:for j = ..       Snippet  }{1:                        }|
         {12:_assert_integer  Function }{1:                        }|
@@ -2032,8 +2034,15 @@ describe("vim.lsp.completion: omnifunc + 'autocomplete'", function()
   end
 
   it('merges with other completions', function()
-    feed('ihillo<cr><esc>ih')
+    exec_lua(function()
+      vim.o.complete = 'o,b'
+      local buf = vim.api.nvim_create_buf(true, false)
+      vim.api.nvim_buf_set_name(buf, 'Xcompletion-source')
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'hillo' })
+    end)
+    feed('ih')
     assert_matches({ 'hillo', 'hallo', 'hello' })
+    eq('Xcompletion-source', exec_lua('return vim.fn.complete_info({ "items" })').items[1].menu)
   end)
 
   it('fuzzy matches without duplication', function()

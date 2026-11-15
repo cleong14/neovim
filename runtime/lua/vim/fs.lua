@@ -41,6 +41,14 @@
 --- ```
 
 local uv = vim.uv
+local uri_parse = require('vim.uri').parse
+
+--- @param path string
+--- @return boolean
+local function is_url(path)
+  -- XXX: always false in nlua0 (build-time generators), which has no C bindings.
+  return vim._core ~= nil and vim._core.path_is_url(path)
+end
 
 local M = {}
 
@@ -125,6 +133,8 @@ end
 --- paths). Slashes are normalized: redundant slashes are removed, and (on Windows) backslashes are
 --- replaced with forward-slashes. Empty segments are removed. Paths are not expanded/resolved.
 ---
+--- To join URI paths, see |vim.uri.join()|.
+---
 --- Examples:
 --- - "foo/", "/bar" => "foo/bar"
 --- - "", "after/plugin" => "after/plugin"
@@ -187,7 +197,8 @@ function M.slug(path, opts)
   local maxlen = opts.maxlen or 180
 
   -- Capture URI scheme before normalize() collapses "://" to ":/" (which looks like "C:/")
-  local uri_scheme = path:match('^([a-zA-Z][a-zA-Z0-9.+-]*)://') ---@type string?
+  local uri = uri_parse(path)
+  local uri_scheme = uri and uri.host and uri.scheme
 
   -- Normalize before computing the hash so equivalent paths produce the same result
   path = vim.fs.normalize(path, { plain = true })
@@ -628,8 +639,8 @@ end
 --- ```
 ---
 --- @since 12
---- @param source integer|string Buffer number (0 for current buffer) or file path (absolute or
----               relative, expanded via `abspath()`) to begin the search from.
+--- @param source integer|string Buffer number (0 for current buffer), file path (absolute or
+---               relative, expanded via `abspath()`), or "file://" URI to begin the search from.
 --- @param marker (string|string[]|fun(name: string, path: string): boolean)[]|string|fun(name: string, path: string): boolean
 ---               Filename, function, or list thereof, that decides how to find the root. To
 ---               indicate "equal priority", specify items in a nested list `{ { 'a.txt', 'b.lua' }, … }`.
@@ -653,6 +664,12 @@ function M.root(source, marker)
     end
   else
     error('invalid type for argument "source": expected string or buffer number')
+  end
+  local uri = uri_parse(path)
+  if uri and uri.scheme == 'file' then
+    path = vim.uri.to_fname(path)
+  elseif is_url(path) then
+    path = assert(uv.cwd())
   end
 
   local markers = type(marker) == 'table' and marker or { marker }
@@ -942,7 +959,7 @@ function M.mkdir(path, opts)
 end
 
 --- @param path string Path to remove
---- @param ty string type of path
+--- @param ty string? type of path
 --- @param recursive? boolean
 --- @param force? boolean
 local function rm(path, ty, recursive, force)
@@ -1012,7 +1029,8 @@ end
 --- Converts `path` to an absolute path. Expands tilde (~) at the beginning of the path (unless
 --- plain=true). Does not check if the path exists, normalize the path, resolve symlinks or
 --- hardlinks (including "." and ".."), or expand environment variables. If the path is already
---- absolute, it is returned unchanged. Converts `\` path separators to `/`.
+--- absolute, it is returned unchanged. Converts `\` path separators to `/`. URLs (e.g.
+--- "fugitive:///a") are returned as-is.
 ---
 --- @since 13
 --- @param path string Path
@@ -1026,6 +1044,10 @@ function M.abspath(path, opts)
   vim.validate('path', path, 'string')
   vim.validate('cwd', opts.cwd, 'string', true)
   vim.validate('plain', opts.plain, 'boolean', true)
+
+  if is_url(path) then
+    return path
+  end
 
   -- Expand ~ to user's home directory
   if not opts.plain then

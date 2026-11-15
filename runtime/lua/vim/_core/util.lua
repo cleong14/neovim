@@ -23,6 +23,25 @@ function M._stringify_error(err)
 end
 -- Generated from async.nvim/lua/async/_errors.lua: end
 
+-- Generated from async.nvim/lua/async/_util.lua: start
+--- Create a function that runs a function when it is garbage collected.
+--- @generic F : function
+--- @param f F
+--- @param gc fun()
+--- @return F
+--- @private
+function M._gc_fun(f, gc)
+  local proxy = newproxy(true)
+  local proxy_mt = getmetatable(proxy)
+  proxy_mt.__gc = gc
+
+  return function(...)
+    local _ = proxy
+    return f(...)
+  end
+end
+-- Generated from async.nvim/lua/async/_util.lua: end
+
 --- Adds one or more blank lines above or below the cursor.
 --- @param above? boolean Place blank line(s) above the cursor
 local function add_blank(above)
@@ -145,6 +164,20 @@ function M.term_exitcode()
     return string.format('[Exit:\226\128\175%d]', info.exitcode)
   end
   return ''
+end
+
+--- Returns the hostname for the bottom-left (or global) statusline, if Nvim is running in a SSH
+--- session (e.g. |remote-ssh|). Else empty.
+---
+--- @return string
+function M.remote_host()
+  if not vim.env.SSH_CONNECTION then
+    return ''
+  end
+  local win = vim.fn.winnr()
+  -- No window below or left of it (floats always have one).
+  local bottom_left = vim.fn.winnr('j') == win and vim.fn.winnr('h') == win
+  return (vim.o.laststatus == 3 or bottom_left) and vim.fn.hostname() or ''
 end
 
 --- Compute a link to a target on a forge host

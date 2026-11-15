@@ -130,7 +130,7 @@ int os_expand_wildcards(int num_pat, char **pat, int *num_file, char ***file, in
   bool ampersand = false;
   // vimglob() function to define for Posix shell
   static char *sh_vimglob_func =
-    "vimglob() { while [ $# -ge 1 ]; do echo \"$1\"; shift; done }; vimglob >";
+    "vimglob() { while [ $# -ge 1 ]; do printf '%s\n' \"$1\"; shift; done }; vimglob >";
   // vimglob() function with globstar setting enabled, only for bash >= 4.X
   static char *sh_globstar_opt =
     "[[ ${BASH_VERSINFO[0]} -ge 4 ]] && shopt -s globstar; ";
@@ -904,6 +904,7 @@ static int do_os_system(char **argv, const char *input, size_t len, char **outpu
   MultiQueue *events = multiqueue_new_child(main_loop.events);
   proc->events = events;
   proc->argv = argv;
+  proc->interrupt = true;  // Send CTRL-C as SIGINT to the child. #8678
   int status = proc_spawn(proc, has_input, true, true);
   if (status) {
     loop_poll_events(&main_loop, 0);

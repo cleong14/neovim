@@ -32,6 +32,7 @@ if _G.arg[1] and vim.startswith(_G.arg[1], '-P') then
   vim.env.TMPDIR = build_dir .. '/Xtest_tmpdir'
   vim.fn.mkdir(vim.env.TMPDIR, 'p')
 end
+local run_dir --- @type string?
 if _G.arg[1] and vim.startswith(_G.arg[1], '-X') then
   local xdg_dir = string.sub(table.remove(_G.arg, 1), 3)
   vim.env.NVIM_RPLUGIN_MANIFEST = xdg_dir .. '/Xtest_rplugin_manifest'
@@ -41,8 +42,9 @@ if _G.arg[1] and vim.startswith(_G.arg[1], '-X') then
   if vim.fn.has('win32') == 0 then
     -- Socket dir (stdpath("run")), deliberately NOT in the build dir. sockaddr_un.sun_path is 104
     -- bytes on macOS/BSD, "/…/build/tmp/nvim.<pid>.<n>" can exceed it. #38623
-    vim.env.XDG_RUNTIME_DIR = ('/tmp/nvim_%d'):format(vim.uv.os_getpid())
-    vim.fn.mkdir(vim.env.XDG_RUNTIME_DIR, 'p')
+    run_dir = ('/tmp/nvim_%d'):format(vim.uv.os_getpid())
+    vim.env.XDG_RUNTIME_DIR = run_dir
+    vim.fn.mkdir(run_dir, 'p')
   end
 end
 
@@ -50,7 +52,11 @@ local root = repo_root()
 prepend_package_roots({ root, root .. '/test', '.', './test' })
 local entries = { root .. '/src/?.lua', root .. '/runtime/lua/?.lua' }
 package.path = table.concat(entries, ';') .. ';' .. package.path
-vim.env.VIMRUNTIME = root .. '/runtime'
+-- Prefer local ./runtime/ source tree if available (may not exist if e.g. the test harness is being
+-- used by an external project without fetching the entire Nvim repo).
+if uv.fs_stat(root .. '/runtime') then
+  vim.env.VIMRUNTIME = root .. '/runtime'
+end
 
 -- The harness is not an Nvim instance under test. If its startup server stays
 -- visible, serverlist({ peer = true }) can connect back to the runner and wait
@@ -60,6 +66,9 @@ if vim.v.servername ~= '' then
 end
 
 local exit_code = require('test.harness').main(_G.arg)
+if run_dir then
+  vim.fn.delete(run_dir, 'rf')
+end
 io.stdout:flush()
 io.stderr:flush()
 
