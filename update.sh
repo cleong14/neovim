@@ -25,8 +25,9 @@ echo ""
 echo "Updating Neovim source..."
 echo ""
 git pull origin master --rebase --allow-unrelated-histories
-git pull upstream master --rebase --allow-unrelated-histories
-git push origin master --force-with-lease
+# merge (not rebase) so origin only moves fast-forward; the global pre-push hook refuses force pushes
+git pull upstream master --no-rebase --no-edit --allow-unrelated-histories
+git push origin master
 
 # 3. Build nvim
 echo ""
